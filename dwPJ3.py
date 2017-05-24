@@ -239,7 +239,8 @@ def profileData(filename):
 
 def audit_data():
 	'''
-	Checking for missing values gives us a check on multile levesl for the audit
+	Checking for missing va
+	lues gives us a check on multile levesl for the audit
 	'''
 	query_missing_gps =  {'$or' :[{'long' :{'$exists': False}}, \
 							{'lat':{'$exists': False}} ] }
