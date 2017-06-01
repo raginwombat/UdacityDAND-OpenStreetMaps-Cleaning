@@ -53,17 +53,16 @@ def check_street_endings():
 			if street_type not in expected_way_endings:
 				unexpected_way_endings.add(street_type)
 				fix_street_name(record)
-	   		else:
+			else:
 	   			records_with_errors.add(record['_id'])
 	pprint.pprint( unexpected_way_endings)
 
 
-def fix_street_name(node):
+def fix_street_name(addr):
 	'''
 		This menthod fixes the street endings that aren't expected and replaces them
 		with the dict values contained in street_mappings
-		Future dev: abstract this to a generic update fuction. Let it handle all updates to map values and dicsts
-		Use a set w/ the object id's to track itesms with issues
+		The input it s dict with the ddr tag and the value is the street name
 	'''
 	split_endings_re_search = split_endings_re.search(node['addr']).group()
 	if split_endings_re_search in street_mappings:
@@ -115,8 +114,96 @@ def fix_postal_code(filename):
 								print split_endings_research(zip)
 
 
-def find_addresses(filename):
+
+
+def xml_to_json(filename):
+	#!!!
 	
+	with open(filename, 'r') as osmfile:
+		#Parse through the file interatively
+		#Debug option, limit processing
+		element= { 'type': None,
+					'attribs': {},
+					'child': [{}] #[{'type': None,	'attribs':{} }]
+					
+					}
+		attrib_data = []	
+		i=0
+		for event, elem in ET.iterparse(filename, events=('end',)):
+			element['type'] = elem.tag
+			#print elem.attrib			
+			element['attribs'] = elem.attrib
+			if elem.tag =='node' or elem.tag =='way' or elem.tag =='relation':
+				print element['type']
+				
+				#print elem.tag, elem.attrib
+				for tag in elem.iter('tag'):
+					
+					
+					pprint.pprint( [{'type': tag.tag, 'attribs': tag.attrib }] )
+					
+					#print element['child']
+					#!!!
+					'''
+						child.attrib element isn't putting attribs in the right place. need to add it to the dict
+					'''
+
+					if element.get('child'):
+					 	element['child']+= [{'type': tag.tag, 'attribs': [tag.attrib ]}]
+					else:
+					 	element.update( {'child':[{'type': tag.tag, 'attribs': [tag.attrib ]}]})
+					 
+					#attrib_data +=[{tag.tag: tag.attrib}]
+					#print element['child']['type'], element['child']['attribs']
+
+					if tag.get('addr:postcode') != None:
+						print "found add"
+						
+			
+			#pprint.pprint(element)
+			#pprint.pprint(element)
+			cur.insert(element)
+			element.clear()
+
+			'''
+			i+=1
+			if i == 1000:
+				break
+			'''
+
+def fix_key_value_pairs():
+	'''
+		This function changes the dictionary values  like {k: <key_val>, v: <val_val>}
+		to {<key_val>: <val_val}. There is also the issue of the value
+	'''
+	#First first top level node values
+	new_key = ""
+	for elem in cur.find({'attribs.k': {'$exists': True}}):
+		new_key = elem['attribs']['k']
+		new_key.replace(':', '_')
+		elem['attribs'].update( { new_key :elem['attribs']['v']})
+		del elem['attribs']['k']
+		del elem['attribs']['v']
+		print cur.replace_one({'_id': elem['_id']},  elem, False)
+
+	#Next fix child node level
+	
+	for elem in cur.find({'child.attribs.k': {'$exists': True}}):
+		for child in elem['child']:
+			for attrib in child['attribs']:
+				attrib.update( {attrib['k']:attrib['v']})
+				del attrib['k']
+				del attrib['v']
+		print cur.replace_one({'_id': elem['_id']},  elem, False)
+
+
+def find_addresses():
+	
+	for elem in cur.find({'child.attribs.addr:street': {'$exists': True}}):
+		print elem
+
+
+	'''
 	with open(filename, 'r') as osmfile:
 		#Parse through the file interatively
 		#Debug option, limit processing
@@ -130,98 +217,7 @@ def find_addresses(filename):
 							print tag.attrib['k']
 							print tag.attrib['v']
 							
-
-
-def xml_to_json(filename):
-
-	with open(filename, 'r') as osmfile:
-		#Parse through the file interatively
-		#Debug option, limit processing
-		element= { 'type': None,
-					'child':{ 
-							'type' : None,
-							'tags': [] }
-					}
-		i=0
-		for event, elem in ET.iterparse(filename, events=('start',)):
-			element['type'] = elem.tag
-			for child in elem.iter():
-				element['child']['type'] =  child.tag
-
-				#print  child.tag
-				
-				for tag in child.iter():
-					element['child']['tags']+=[{tag.tag: tag.attrib}]
-					#element[]['tags'] = tag.attrib
-					#print tag.attrib
-					#print type(tag.attrib)
-					
-					if tag.get('addr:postcode') != None:
-						print "found add"
-					
-			
-			#pprint.pprint(element)
-			pprint.pprint(element)
-			db['test2'].insert(element)
-			element.clear()
-			i+=1
-			if i == 1000:
-				break
-
-
-def extract_and_write_nodes_to_db(filename):
-	err_street_endings = dict()
-	street = {}
-	''' Document Structure
-			'name': Name of element,
-			'long': Longitude
-			'lat" : lattitude'
-			'addr': Address of Node if applicable,
-			'type': type of tag way|node},
-			'username':  Name of user who edited element
-			'user id':  Id of user who edited element
-			'loc_class':  Additional location information support furthuer cleaning
 	'''
-
-	with open(filename, 'r') as osmfile:
-		#Parse through the file interatively
-		#Debug option, limit processing
-		i=0
-		for event, elem in ET.iterparse(filename, events=('start',)):
-				#Filter tags for only node or ways tha will have tag elements
-				if elem.tag =='node' or elem.tag =='way':
-					#Add type to dict to write to db
-					street['type'] = elem.tag
-					#Add locs to dict to write to db
-					if elem.tag =='node':
-						street['lat'] = get_attribute( elem, 'lat', ERRLOG)
-						street['long'] = get_attribute( elem, 'lon', ERRLOG)
-					for tag in elem.iter('tag'):
-						#Get name of the element
-						if tag.attrib['k'] == 'name':
-							street['name'] = tag.attrib['v']
-						#Get street names for each tag
-						if tag.attrib['k']  =="addr:street":
-							street['addr'] = tag.attrib['v']
-						if tag.attrib['k'] == 'amenity':
-							street['loc_class'] = tag.attrib['v']
-					street['userid'] =get_attribute( elem, 'uid', ERRLOG)
-					street['username'] = get_attribute( elem, 'user', ERRLOG)
-				
-				if bool(street):
-					cur.insert(street)
-
-				street.clear()
-				
-				
-				'''
-				#Debug option, limit processing while chaning documen structure
-				i+=1
-				if i == 1000:
-					break
-				
-
-				'''
 
 
 
@@ -356,6 +352,14 @@ def main():
 	#Inital parsing for adding new feilds to DB
 	#extract_and_write_nodes_to_db(OSMFILE)
 	
+	#1) First pull xml elements to database:
+	#xml_to_json(OSMFILE)
+
+	#2) Convert k, v dicts to actual values
+	#fix_key_value_pairs()
+
+	#3) Find addresses
+	find_addresses()
 
 
 	#test consistency by finding mismatched long lat pairs
@@ -367,7 +371,6 @@ def main():
 	#Cealning Postal codes
 	#fix_postal_code(OSMFILE)
 	
-	xml_to_json(OSMFILE)
 	#Dump stats for db per specs
 	#dbStats()
 
@@ -376,7 +379,7 @@ def main():
 	#topContributors()
 	
 	#Write out tag stats
-	profileData(OSMFILE)
+	#profileData(OSMFILE)
 
 	print("--- %s seconds ---" % (time.time() - start_time))
 
