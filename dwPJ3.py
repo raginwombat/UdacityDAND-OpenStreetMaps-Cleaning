@@ -39,82 +39,6 @@ name_fixes = {  'H.S.': 'High School',
                 'HS': 'High School'}
 records_with_errors = set()
 
-def check_street_endings():
-	'''
-	This is an audit method to check for odd street name endings
-	If a strange ending and  is already mapps it replaces the value
-	If it can't be mapped the record is added to an error dict 
-	'''
-
-	for record in  cur.find({'addr': {'$exists': True }}):
-		split_endings_re_search = split_endings_re.search(record['addr'])
-		if split_endings_re_search:
-			street_type = split_endings_re_search.group()
-			if street_type not in expected_way_endings:
-				unexpected_way_endings.add(street_type)
-				fix_street_name(record)
-			else:
-	   			records_with_errors.add(record['_id'])
-	pprint.pprint( unexpected_way_endings)
-
-
-def fix_street_name(addr):
-	'''
-		This menthod fixes the street endings that aren't expected and replaces them
-		with the dict values contained in street_mappings
-		The input it s dict with the ddr tag and the value is the street name
-	'''
-	split_endings_re_search = split_endings_re.search(node['addr']).group()
-	if split_endings_re_search in street_mappings:
-		#replace the incorrect entry identifyed with the dict mapping
-		corrrected_addr = re.sub(split_endings_re, street_mappings[split_endings_re_search], node['addr']) 
-		#update db with the corrected value
-		cur.update( {'_id':node['_id']}, \
-						{'$set': {'addr':corrrected_addr, 'corrected':True }}, \
-						upsert=False)
-
-		
-
-def is_highway(node):
-	#deprecated/unused
-	re.compile(r'')
-
-def print_tag(tag):
-	for attrib in tag.iter('attrib'):
-		print attrib
-		print "sub"
-
-
-def fix_postal_code(filename):
-	
-	with open(filename, 'r') as osmfile:
-		#Parse through the file interatively
-		#Debug option, limit processing
-		i=0
-		for event, elem in ET.iterparse(filename, events=('start',)):
-				#Filter tags for only node or ways tha will have tag elements
-				if elem.tag =='node' or elem.tag =='way':
-					for tag in elem.iter('tag'):
-						if tag.attrib['k'] == 'addr:postcode':
-							zip = str(tag.attrib['v'])
-							
-							if (len(zip) != 5) and (len(zip) !=10):
-								print 'zip error to fix: '+ zip
-								print len(zip)
-								print_tag(tag)
-		
-								#pprint.pprint(elem)
-								if zip.find(' ') > 0:
-									print zip.find(' ')
-									print split_endings_re.search(zip).group()
-							
-							#Check if zip code isn't in FL by checking digiti
-							elif int(zip[0]) != 3:
-								print 'Error: Zip not in FL: '+ zip
-								print split_endings_research(zip)
-
-
-
 
 def xml_to_json(filename):
 	#!!!
@@ -189,64 +113,83 @@ def fix_key_value_pairs():
 	#Next fix child node level
 	
 	for elem in cur.find({'child.attribs.k': {'$exists': True}}):
+		print "pre"
+		print elem
 		for child in elem['child']:
 			for attrib in child['attribs']:
-				attrib.update( {attrib['k']:attrib['v']})
+				new_key = attrib['k']
+				print attrib['k']
+				new_key.replace(':', '_')
+
+				attrib.update( {new_key:attrib['v']})
+				print attrib['k']
 				del attrib['k']
 				del attrib['v']
+				
+		print cur.replace_one({'_id': elem['_id']},  elem, False)
+		print "post"
+		print elem
+
+def find_streets():
+	
+	for elem in cur.find({'child.attribs.addr:street': {'$exists': True}}):
+		for child in elem['child']:
+			for attrib in child['attribs']:
+				if  attrib.get('addr:street'):
+					print "found street"
+					print attrib['addr:street']
+					attrib['addr:street'] =  fix_street_name(attrib['addr:street'])
+
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
 
 
-def find_addresses():
-	
-	for elem in cur.find({'child.attribs.addr:street': {'$exists': True}}):
-		print elem
 
-
+def fix_street_name(street):
 	'''
-	with open(filename, 'r') as osmfile:
-		#Parse through the file interatively
-		#Debug option, limit processing
-		i=0
-		for event, elem in ET.iterparse(filename, events=('start',)):
-				#Filter tags for only node or ways tha will have tag elements
-				if elem.tag =='node' or elem.tag =='way':
-					for tag in elem.iter('tag'):
-						if tag.attrib['k'].find('addr'):
-							print "found address portion"
-							print tag.attrib['k']
-							print tag.attrib['v']
-							
+		This menthod fixes the street endings that aren't expected and replaces them
+		with the dict values contained in street_mappings
+		The input it s dict with the ddr tag and the value is the street name
 	'''
+	print street
+
+	split_endings_re_search = split_endings_re.search(street).group()
+	if split_endings_re_search in street_mappings:
+		#replace the incorrect entry identifyed with the dict mapping
+		return re.sub(split_endings_re, street_mappings[split_endings_re_search], street) 
 
 
 
-'''Added this bit since some nodes threw errors when looking for expected 
-attributes we're going to get an error log that we can refernce'''
-def get_attribute(tag, keyname, errlog):
-	# DEBUG - Refactor this wih getattr
-	with open(errlog, 'w') as fp:
-		errout = csv.writer(fp)
-	try:
-		return tag.attrib[keyname]
+def find_postal_code():
+	for elem in cur.find({'child.attribs.addr:postcode': {'$exists': True}}):
+		for child in elem['child']:
+			for attrib in child['attribs']:
+				if attrib.get('addr:postcode') :
+					print "found postalcode"
+					print attrib['addr:postcode']
+					check_postal_code(attrib['addr:postcode'])
+					attrib['addr:postcode'] =  fix_postal_code(attrib['addr:postcode'])
+					print attrib['addr:postcode']
+
+		print cur.replace_one({'_id': elem['_id']},  elem, False)
+
+
+def fix_postal_code(zip):
+	'''
+		Takes Dict from find postal coded with the key of addr:postcode and value of the postal code
+	'''
 	
-	except:
-		print tag.attrib
-		errout.writerow(tag.attrib)
-		return None
-
-
-def find_strange_ways(filename):
-	#deprecated/unused
-	for event, elem in ET.iterparse(filename, events=('start',)):
-		way_tags = {}
-		if elem.tag == 'way':
-			for tag in elem.iter('tag'):
-				if  tag.attrib['k'] == 'addr:street':
-					build_street_types(way_endings, tag.attrib['v'])
-
-			
+	if (len(zip) != 5) and (len(zip) !=10):
+		print 'zip error to fix: '+ zip
+		print len(zip)
+		if zip.find(' ') > 0:
+			print zip.find(' ')
+			return split_endings_re.search(zip).group()
 	
+	#Check if zip code isn't in FL by checking digiti
+	elif int(zip[0]) != 3:
+		print 'Error: Zip not in FL: '+ zip
+		print split_endings_re.search(zip)
+
 def dbStats():
 	'''
 	This section fulfils the requiremetns for Overview of the data in the grading rubric
@@ -359,18 +302,16 @@ def main():
 	#fix_key_value_pairs()
 
 	#3) Find addresses
-	find_addresses()
+	find_streets()
 
+
+	#4) Find Postal Code
+	find_postal_code()
 
 	#test consistency by finding mismatched long lat pairs
-	#audit_data()
+	audit_data()
 
-	#cleaning task to check streetnames
-	#check_street_endings()
 
-	#Cealning Postal codes
-	#fix_postal_code(OSMFILE)
-	
 	#Dump stats for db per specs
 	#dbStats()
 
