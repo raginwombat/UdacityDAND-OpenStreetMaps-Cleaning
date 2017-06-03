@@ -282,15 +282,23 @@ def profileData(filename):
 		for event, elem in ET.iterparse(filename,  events=('start',)):
 			try:
 				tags[elem.tag] += 1
+
 			except:
 				tags[elem.tag] = 1
+				#print elem.tag
+
 			for tag in elem.iter('tag'):
 				try:
+					#print tag.attrib
 					way_tags[tag.attrib['k']] += 1
+					#print way_tags
+
 				except:
+					#print tag.attrib
 					way_tags[tag.attrib['k']] = 1
+			#break
 			elem.clear()
-			break
+
 
 		#Write header for tag dump section
 		fp.write(str(len(tags))+" diff tags in document:")
@@ -299,34 +307,16 @@ def profileData(filename):
 			csv_writer.writerow([k,v])
 
 		#Write out all of the differnt type of tags
-		fp.write('\nNumber of tags:\n')
-		fp.write(str(len(tags)))
-		fp.write('\n')
-		fp.write('\nWay tag subtypes\n')
+		fp.write('\ntag subtypes\n')
 		for k, v in way_tags.items():
 			csv_writer.writerow([k,v])
 
+		print len(tags)
+		#print tags
+		#print way_tags
 		
 
-	
 
-def audit_data():
-	'''
-	Checking for missing values gives us a check on multile levesl for the audit
-	'''
-	query_missing_gps =  {'$or' :[{'lon' :{'$exists': False}}, \
-							{'lat':{'$exists': False}} ] }
-	#query_missing_name = {'child.attribs.name' : {'$exists': False}}
-	query_missing_username =  {'username' : {'$exists': False}}
-	query_missing_userid =  { 'userid' : {'$exists': False}}
-	
-
-	query_builder = {'type': 'node'}
-	query_builder.update( query_missing_username)
-	query_builder.update( query_missing_userid)
-		
-	for record in cur.find(query_builder):
-		pprint.pprint( record)
 
 
 
@@ -335,6 +325,8 @@ def main():
 	#Inital parsing for adding new feilds to DB
 	#extract_and_write_nodes_to_db(OSMFILE)
 	
+	#Profile Data
+	profileData(OSMFILE)
 	#1) First pull xml elements to database:
 	#xml_to_json(OSMFILE)
 
@@ -349,15 +341,7 @@ def main():
 	#find_postal_code()
 
 	#5) Fix Me Data
-	write_out_fix_me()
-
-	
-	#test consistency by finding mismatched long lat pairs
-	#audit_data()
-
-	#Intersing data
-	#!!! To DO
-	#intresting_data()
+	#write_out_fix_me()
 
 	#6) Print out collection stats for data set
 	#dbStats()
