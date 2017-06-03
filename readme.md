@@ -2,65 +2,65 @@
 
 ## Map Area
 --------------
-Orlando lorida
+Orlando Florida
 
 ## Wrangling Challanges
 --------------------------
 ## Tag Sub Values
 A deign decision of the OSM data is that the tags use a key value structures to encode the tag infortiom using a key value pair. While this is helpful for processing the XML data it isn't needed in a JSON/dictionary type structure.
 
-''' xml
+```xml
 	<tag k="name" v="Duff Beer"/>
-'''
+```
 
 It was stripped away using the fix_key_value_pairs function.  The dictionar is updated with a new key, value pair comprised of the k attribute v attribute. 
 
-'''  python
+``` python
 	elem['attribs'].update( { elem['attribs']['k'] :elem['attribs']['v']})
 		del elem['attribs']['k']
 		del elem['attribs']['v']
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
-'''
+```
 
 This would transfer the above tag into the following.
-''' json
+```json
 	'name': 'Duff Beer'
-'''
+```
 
 This transformation needed to occur on the inital node level as well as the child tag sub level.
 
 ## Fix Street Endings
 The data had street endings that were non standard  as shown below.
 
-''' xml
+```xml
 	<tag k="addr:street" v="Garden Parks Blvd."/>
 	<tag k="addr:street" v="Universal Blvd"/>
 	<tag k="addr:street" v="E Michigan St."/>
 
-'''
+```
 
 The follwing code uses a regex and replace function to replace the street endings with mappings in a dictionary. The regex pulls out the last string following a space in the addr:street tag.
 
-''' python
+```python
 split_endings_re_search = split_endings_re.search(street).group()
 	if split_endings_re_search in street_mappings:
 		#replace the incorrect entry identifyed with the dict mapping
 		return re.sub(split_endings_re, street_mappings[split_endings_re_search], street) 
-'''
+```
 
 
 ## Fix Zip Codes
 The Zip codes are another area of the adress that has lots of issues and is realatively easy to clean. Prior to changin the Postal code there were a few node tags that included the state along with the zip code.
 
-''' xml
+```xml
 		<tag k="addr:postcode" v="FL 32792"/>
 		<tag k="addr:postcode" v="FL 32803"/>
 		<tag k="addr:postcode" v="FL 32803"/>
-'''
+```
 
 This was cleaned by utilizing the same regex expression used for the street name identification. The code first checks for zipcodes that aren't 5 or 10 characters long first. This reduces the amount of checks that needs to be made for the zip code.  It then checks for any spaces in the zipcode and if it's found overwrites the postcode value with the string after the space. There is also a check for zipcodes that don't start with 3 indicatiing it's not in Florida.
 
-''' python
+```python
 if (len(zip) != 5) and (len(zip) !=10):
 		print 'zip error to fix: '+ zip
 		print len(zip)
@@ -71,11 +71,10 @@ if (len(zip) != 5) and (len(zip) !=10):
 	elif int(zip[0]) != 3:
 		print 'Error: Zip not in FL: '+ zip
 		print split_endings_re.search(zip)
-'''
+```
 
 ## Overview and Data Stats
 --------------------------
-
 ### File Size
 orlando_florida.osm ....... 128M
 
@@ -118,7 +117,7 @@ orlando_florida.osm ....... 128M
 10. grouper made 27508 contributions
 
 
-''' python
+```python
 	def topContributors():
 		pipeline = [{'$match': {'attribs.user': {'$exists': True}}},
 					{'$group': {'_id':'$attribs.user', 'count': {'$sum':1}}}, \
@@ -129,9 +128,10 @@ orlando_florida.osm ....... 128M
 		print 'Top Contributors to Map:'					
 		for i, user in enumerate(cur.aggregate(pipeline), start=1):
 			print str(i)+'. '+user['_id']+' made '+str(user['count'])+' contributions'
-''''
+```
 
 ## Additional Ideas
+---------------------
 ### GPS Location Convergence
 A lot of the nodes seem to be revisions to the GPS coordinates. A sum of squared computation can reduce the distance down to a scalar metric that can be used to converge the GPS coordinates by rejecting GPS coordinates that differ too drastically from the existing points. 
 
@@ -158,13 +158,11 @@ The tag values have a lot of differing values. My profile method shows 862 diffe
 ## Fix Me Tag
 While doing address cleaning I discovered a tag named fixme.  The tags were highly varied and seem to be notes that require indiviudual attention. To dig deepter I pulled out all of the nodes that contained fixm tag and wrote it out ot a file. 
 
-''' xml
+```xml
 		<tag k="fixme" v="Need to copy relations/tags from northbound side"/>
 		<tag k="fixme" v="check speed limits and route number (434 or 423?)"/>
-		<tag k="fixme" v="Can someone confirm that this basketball was removed with building changing themes"/>
-		<tag k="fixme" v="check speed limits and route number (434 or 423?)"/>
 		<tag k="fixme" v="name?"/>
-'''
+```
 
 #### Benefits
 * This gives ready made issues to fix
