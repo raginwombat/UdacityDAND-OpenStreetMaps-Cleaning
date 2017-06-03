@@ -4,6 +4,7 @@ from pymongo import MongoClient
 import xml.etree.cElementTree as ET
 import re
 import pprint
+import json
 #Get stats on exec time
 import time
 
@@ -103,9 +104,8 @@ def fix_key_value_pairs():
 	#First first top level node values
 	new_key = ""
 	for elem in cur.find({'attribs.k': {'$exists': True}}):
-		new_key = elem['attribs']['k']
-		new_key.replace(':', '_')
-		elem['attribs'].update( { new_key :elem['attribs']['v']})
+		
+		elem['attribs'].update( { elem['attribs']['k'] :elem['attribs']['v']})
 		del elem['attribs']['k']
 		del elem['attribs']['v']
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
@@ -113,22 +113,21 @@ def fix_key_value_pairs():
 	#Next fix child node level
 	
 	for elem in cur.find({'child.attribs.k': {'$exists': True}}):
-		print "pre"
-		print elem
+		#print "pre"
+		#print elem
 		for child in elem['child']:
 			for attrib in child['attribs']:
-				new_key = attrib['k']
-				print attrib['k']
+				
 				new_key.replace(':', '_')
 
-				attrib.update( {new_key:attrib['v']})
-				print attrib['k']
+				attrib.update( {attrib['k']:attrib['v']})
+				#print attrib['k']
 				del attrib['k']
 				del attrib['v']
 				
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
-		print "post"
-		print elem
+		#print "post"
+		#print elem
 
 def find_streets():
 	
@@ -136,8 +135,8 @@ def find_streets():
 		for child in elem['child']:
 			for attrib in child['attribs']:
 				if  attrib.get('addr:street'):
-					print "found street"
-					print attrib['addr:street']
+					#print "found street"
+					#print attrib['addr:street']
 					attrib['addr:street'] =  fix_street_name(attrib['addr:street'])
 
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
@@ -150,7 +149,7 @@ def fix_street_name(street):
 		with the dict values contained in street_mappings
 		The input it s dict with the ddr tag and the value is the street name
 	'''
-	print street
+	#print street
 
 	split_endings_re_search = split_endings_re.search(street).group()
 	if split_endings_re_search in street_mappings:
@@ -164,13 +163,12 @@ def find_postal_code():
 		for child in elem['child']:
 			for attrib in child['attribs']:
 				if attrib.get('addr:postcode') :
-					print "found postalcode"
-					print attrib['addr:postcode']
-					check_postal_code(attrib['addr:postcode'])
+					
 					attrib['addr:postcode'] =  fix_postal_code(attrib['addr:postcode'])
-					print attrib['addr:postcode']
+					#print attrib['addr:postcode']
 
-		print cur.replace_one({'_id': elem['_id']},  elem, False)
+		#print cur.replace_one({'_id': elem['_id']},  elem, False)
+		cur.replace_one({'_id': elem['_id']},  elem, False)
 
 
 def fix_postal_code(zip):
@@ -179,8 +177,8 @@ def fix_postal_code(zip):
 	'''
 	
 	if (len(zip) != 5) and (len(zip) !=10):
-		print 'zip error to fix: '+ zip
-		print len(zip)
+		#print 'zip error to fix: '+ zip
+		#print len(zip)
 		if zip.find(' ') > 0:
 			print zip.find(' ')
 			return split_endings_re.search(zip).group()
@@ -190,9 +188,31 @@ def fix_postal_code(zip):
 		print 'Error: Zip not in FL: '+ zip
 		print split_endings_re.search(zip)
 
+
+
+def write_out_fix_me():
+	data = []
+	with open('fixme.json', 'w') as fp:
+		csv_writer = csv.writer(fp)
+		for elem in cur.find({'child.attribs.fixme' : {'$exists': True}}) :
+		 	print type(elem)
+		 	
+		 	print elem
+		 	data+=elem
+		 	csv_writer.writerow(elem)
+		 	#json.dump(elem, fp)
+		 	#csv.writer(out_file, delimieter=", ").writerow(elem)
+		#json.dump(data, out_file)
+		print len(data)
+		#print data
+		#json.dump(data, out_file)
+
+
+
+
 def dbStats():
 	'''
-	This section fulfils the requiremetns for Overview of the data in the grading rubric
+	This section fulfils the requirements for Overview of the data in the grading rubric
 
 	'''
 	stats = {
@@ -200,22 +220,43 @@ def dbStats():
 				'unique_users' : len(cur.distinct('userid')),
 				'unique_nodes' : cur.count( {'type':'node'} ),
 				'unique_ways' : cur.count( {'type':'way'} ),
-				'num_publix' : cur.count({'name':re.compile('.*ublix.*')}),
-				'num_high_school' : cur.count({'name': re.compile('.*High School.*')}),
-				'num_elem_school' : cur.count({'name': re.compile('.*Elementary School.*')}),
-				#To do, give top 10 contributors
-
+				
 
 	}
 	
 	pprint.pprint( stats)
 
-
+def intresting_data():
 	
-def topContributors():
-	pipeline = [{'$group': {'_id':'$username', 'count': {'$sum':1}}}, \
+	pipeline = [{'$match': {'child.attribs.amenity': 'place_of_worship'}},
+				{'$unwind': 'child.attribs.religion'}, \
+				#{'$group': {'_id':'$child.attribs.religion', 'count': {'$sum':1}}}, \
 				{'$sort': {'count':-1}}, \
-				{'$project':{ 'userid': 1, 'username':1, 'count':1}}, \
+				
+				{'$project':{ 'religion':'$child.attribs.religion', 'count':1}}, \
+				{'$limit': 10} ]
+
+	religions = cur.aggregate(pipeline)
+	for reli in religions:
+		print reli
+
+	stats = {
+				'num_publix' : cur.count({'child.attribs.name':re.compile('.*ublix.*')}),
+				'num_high_school' : cur.count({'child.attribs.name': re.compile('.*High School.*')}),
+				'num_elem_school' : cur.count({'child.attribs.name': re.compile('.*Elementary School.*')}),
+				'num_of_churches' : cur.count({'child.attribs.amenity': 'place_of_worship'},
+			)
+	}
+	pprint.pprint(stats)
+	 
+
+
+
+def topContributors():
+	pipeline = [{'$match': {'attribs.user': {'$exists': True}}},
+				{'$group': {'_id':'$attribs.user', 'count': {'$sum':1}}}, \
+				{'$sort': {'count':-1}}, \
+				{'$project':{ 'uid': 1, 'user':1, 'count':1}}, \
 				{'$limit': 10} ]
 
 	print 'Top Contributors to Map:'					
@@ -271,12 +312,11 @@ def profileData(filename):
 
 def audit_data():
 	'''
-	Checking for missing va
-	lues gives us a check on multile levesl for the audit
+	Checking for missing values gives us a check on multile levesl for the audit
 	'''
-	query_missing_gps =  {'$or' :[{'long' :{'$exists': False}}, \
+	query_missing_gps =  {'$or' :[{'lon' :{'$exists': False}}, \
 							{'lat':{'$exists': False}} ] }
-	query_missing_name = {'name' : {'$exists': False}}
+	#query_missing_name = {'child.attribs.name' : {'$exists': False}}
 	query_missing_username =  {'username' : {'$exists': False}}
 	query_missing_userid =  { 'userid' : {'$exists': False}}
 	
@@ -302,26 +342,33 @@ def main():
 	#fix_key_value_pairs()
 
 	#3) Find addresses
-	find_streets()
+	#find_streets()
 
 
 	#4) Find Postal Code
-	find_postal_code()
+	#find_postal_code()
 
+	#5) Fix Me Data
+	write_out_fix_me()
+
+	
 	#test consistency by finding mismatched long lat pairs
-	audit_data()
+	#audit_data()
 
+	#Intersing data
+	#!!! To DO
+	#intresting_data()
 
-	#Dump stats for db per specs
+	#6) Print out collection stats for data set
 	#dbStats()
 
-	#find_addresses(OSMFILE)
-	#Dump top contributors
+
+	#7( Print out top contributors
 	#topContributors()
 	
-	#Write out tag stats
-	#profileData(OSMFILE)
+	
 
 	print("--- %s seconds ---" % (time.time() - start_time))
 
 if __name__ == '__main__': main()
+
