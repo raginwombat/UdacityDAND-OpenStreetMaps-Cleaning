@@ -55,42 +55,25 @@ def xml_to_json(filename):
 		attrib_data = []	
 		i=0
 		for event, elem in ET.iterparse(filename, events=('end',)):
-			element['type'] = elem.tag
-			#print elem.attrib			
+			element['type'] = elem.tag		
 			element['attribs'] = elem.attrib
 			if elem.tag =='node' or elem.tag =='way' or elem.tag =='relation':
 				print element['type']
 				
-				#print elem.tag, elem.attrib
 				for tag in elem.iter('tag'):
-					
-					
 					pprint.pprint( [{'type': tag.tag, 'attribs': tag.attrib }] )
-					
-					#print element['child']
-					#!!!
-					'''
-						child.attrib element isn't putting attribs in the right place. need to add it to the dict
-					'''
-
 					if element.get('child'):
 					 	element['child']+= [{'type': tag.tag, 'attribs': [tag.attrib ]}]
 					else:
 					 	element.update( {'child':[{'type': tag.tag, 'attribs': [tag.attrib ]}]})
-					 
-					#attrib_data +=[{tag.tag: tag.attrib}]
-					#print element['child']['type'], element['child']['attribs']
-
 					if tag.get('addr:postcode') != None:
 						print "found add"
 						
-			
-			#pprint.pprint(element)
-			#pprint.pprint(element)
 			cur.insert(element)
 			element.clear()
 
 			'''
+			#Liine to limit processing of json file
 			i+=1
 			if i == 1000:
 				break
@@ -113,21 +96,14 @@ def fix_key_value_pairs():
 	#Next fix child node level
 	
 	for elem in cur.find({'child.attribs.k': {'$exists': True}}):
-		#print "pre"
-		#print elem
 		for child in elem['child']:
 			for attrib in child['attribs']:
-				
 				new_key.replace(':', '_')
-
 				attrib.update( {attrib['k']:attrib['v']})
-				#print attrib['k']
 				del attrib['k']
 				del attrib['v']
-				
+
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
-		#print "post"
-		#print elem
 
 def find_streets():
 	
@@ -135,10 +111,7 @@ def find_streets():
 		for child in elem['child']:
 			for attrib in child['attribs']:
 				if  attrib.get('addr:street'):
-					#print "found street"
-					#print attrib['addr:street']
 					attrib['addr:street'] =  fix_street_name(attrib['addr:street'])
-
 		print cur.replace_one({'_id': elem['_id']},  elem, False)
 
 
@@ -149,7 +122,6 @@ def fix_street_name(street):
 		with the dict values contained in street_mappings
 		The input it s dict with the ddr tag and the value is the street name
 	'''
-	#print street
 
 	split_endings_re_search = split_endings_re.search(street).group()
 	if split_endings_re_search in street_mappings:
@@ -163,11 +135,8 @@ def find_postal_code():
 		for child in elem['child']:
 			for attrib in child['attribs']:
 				if attrib.get('addr:postcode') :
-					
 					attrib['addr:postcode'] =  fix_postal_code(attrib['addr:postcode'])
-					#print attrib['addr:postcode']
 
-		#print cur.replace_one({'_id': elem['_id']},  elem, False)
 		cur.replace_one({'_id': elem['_id']},  elem, False)
 
 
@@ -177,8 +146,6 @@ def fix_postal_code(zip):
 	'''
 	
 	if (len(zip) != 5) and (len(zip) !=10):
-		#print 'zip error to fix: '+ zip
-		#print len(zip)
 		if zip.find(' ') > 0:
 			print zip.find(' ')
 			return split_endings_re.search(zip).group()
@@ -189,25 +156,12 @@ def fix_postal_code(zip):
 		print split_endings_re.search(zip)
 
 
-
 def write_out_fix_me():
 	data = []
 	with open('fixme.json', 'w') as fp:
 		csv_writer = csv.writer(fp)
 		for elem in cur.find({'child.attribs.fixme' : {'$exists': True}}) :
-		 	print type(elem)
-		 	
-		 	print elem
-		 	data+=elem
-		 	csv_writer.writerow(elem)
-		 	#json.dump(elem, fp)
-		 	#csv.writer(out_file, delimieter=", ").writerow(elem)
-		#json.dump(data, out_file)
-		print len(data)
-		#print data
-		#json.dump(data, out_file)
-
-
+		 	fp.write(pprint.pformat(elem))
 
 
 def dbStats():
@@ -230,7 +184,6 @@ def intresting_data():
 	
 	pipeline = [{'$match': {'child.attribs.amenity': 'place_of_worship'}},
 				{'$unwind': 'child.attribs.religion'}, \
-				#{'$group': {'_id':'$child.attribs.religion', 'count': {'$sum':1}}}, \
 				{'$sort': {'count':-1}}, \
 				
 				{'$project':{ 'religion':'$child.attribs.religion', 'count':1}}, \
@@ -249,8 +202,6 @@ def intresting_data():
 	}
 	pprint.pprint(stats)
 	 
-
-
 
 def topContributors():
 	pipeline = [{'$match': {'attribs.user': {'$exists': True}}},
@@ -282,21 +233,15 @@ def profileData(filename):
 		for event, elem in ET.iterparse(filename,  events=('start',)):
 			try:
 				tags[elem.tag] += 1
-
 			except:
 				tags[elem.tag] = 1
-				#print elem.tag
 
 			for tag in elem.iter('tag'):
 				try:
-					#print tag.attrib
 					way_tags[tag.attrib['k']] += 1
-					#print way_tags
 
 				except:
-					#print tag.attrib
 					way_tags[tag.attrib['k']] = 1
-			#break
 			elem.clear()
 
 
@@ -312,9 +257,7 @@ def profileData(filename):
 			csv_writer.writerow([k,v])
 
 		print len(tags)
-		#print tags
-		#print way_tags
-		
+
 
 
 
@@ -322,33 +265,30 @@ def profileData(filename):
 
 def main():
 
-	#Inital parsing for adding new feilds to DB
-	#extract_and_write_nodes_to_db(OSMFILE)
-	
-	#Profile Data
+	#0) Profile Data
 	profileData(OSMFILE)
+
 	#1) First pull xml elements to database:
-	#xml_to_json(OSMFILE)
+	xml_to_json(OSMFILE)
 
 	#2) Convert k, v dicts to actual values
-	#fix_key_value_pairs()
+	fix_key_value_pairs()
 
 	#3) Find addresses
-	#find_streets()
-
+	find_streets()
 
 	#4) Find Postal Code
-	#find_postal_code()
+	find_postal_code()
 
 	#5) Fix Me Data
-	#write_out_fix_me()
+	write_out_fix_me()
 
 	#6) Print out collection stats for data set
-	#dbStats()
+	dbStats()
 
 
 	#7( Print out top contributors
-	#topContributors()
+	topContributors()
 	
 	
 
